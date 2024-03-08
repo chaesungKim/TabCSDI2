@@ -85,7 +85,9 @@ class Tokenizer(nn.Module):
                 distance = torch.norm(emb_vec - Batch_cat[j, i, :], dim=1)
                 nearest = torch.argmin(distance)
                 new_Batch_cat[j, i] = nearest + 1
+            # print(Batch_numerical.device, new_Batch_cat.device) ## check
             new_Batch_cat = new_Batch_cat.to(Batch_numerical.device)
+            # print(Batch_numerical.device, new_Batch_cat.device) ## check
         return torch.cat([Batch_numerical, new_Batch_cat], dim=1)
 
 
@@ -109,6 +111,10 @@ class CSDI_base(nn.Module):
 
         if exe_name == "census":
             with open("./data_census_ft/transformed_columns.pk", "rb") as f:
+                cont_list, num_cate_list = pickle.load(f)
+
+        if exe_name == "housing":
+            with open("./data_housing_ft/transformed_columns.pk", "rb") as f:
                 cont_list, num_cate_list = pickle.load(f)
 
         self.cont_list = cont_list
