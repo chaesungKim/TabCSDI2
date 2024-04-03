@@ -10,7 +10,7 @@ def train(
     config,
     train_loader,
     valid_loader=None,
-    valid_epoch_interval=300,
+    valid_epoch_interval=200, ###
     foldername="",
 ):
     # Control random seed in the current script.
@@ -27,7 +27,7 @@ def train(
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
         optimizer, milestones=[p0, p1, p2, p3], gamma=0.1
     )
-    # history = {'train_loss':[], 'val_rmse':[]}
+    history = {'train_loss':[], 'val_rmse':[]} ###
     best_valid_loss = 1e10
     for epoch_no in range(config["epochs"]):
         avg_loss = 0
@@ -104,8 +104,8 @@ def train(
         torch.save(model.state_dict(), output_path)
 
     # Use folloing code for saving training history.
-    # with open(foldername+'/saved_history.pkl', 'wb') as f:
-    #     pickle.dump(history, f)
+    with open(foldername+'/saved_history.pkl', 'wb') as f:
+        pickle.dump(history, f)
 
 
 def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldername=""):

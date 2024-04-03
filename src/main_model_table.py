@@ -14,8 +14,9 @@ def produce_NA(X, p_miss, mecha="MAR", opt=None, p_obs=None, q=None, seed=0):
     if not to_torch:
         X = X.astype(np.float32)
         X = torch.from_numpy(X)
-    
-    np.random.seed(seed);torch.manual_seed(seed)
+    if type(seed) == int: ###
+        np.random.seed(seed);torch.manual_seed(seed) ###
+
     if mecha == "MAR":
         mask = MAR_mask(X, p_miss, p_obs).double()
     elif mecha == "MNAR" and opt == "logistic":
@@ -116,7 +117,7 @@ class CSDI_base(nn.Module):
         # print(data.shape)
         data = np.squeeze(data,axis=1) ###
         # print(type(data))
-        masks = produce_NA(data, p_miss=self.missing_ratio, p_obs=self.p_obs, mecha=self.mecha, opt='logistic', seed=3) ### seed 추가
+        masks = produce_NA(data, p_miss=self.missing_ratio, p_obs=self.p_obs, mecha=self.mecha, opt='logistic', seed=None) ### seed 적용 안 되도록
         masks = (1-np.array(masks))
         observed_mask = np.squeeze(np.array(observed_mask.cpu()),axis=1) # (64,15)
         masks = masks * observed_mask
