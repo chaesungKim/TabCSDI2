@@ -56,7 +56,7 @@ os.makedirs(foldername, exist_ok=True)
 with open(foldername + "config.json", "w") as f:
     json.dump(config, f, indent=4)
 
-full_loader, train_loader, valid_loader, test_loader = get_dataloader( ### 이거 수정!!
+full_loader, train_loader, valid_loader = get_dataloader( ### test_loader 뺌
     seed=args.seed,
     nfold=args.nfold,
     batch_size=config["train"]["batch_size"],
@@ -83,9 +83,9 @@ else:
     model.load_state_dict(torch.load("./save/" + args.modelfolder + "/model.pth"))
 print("---------------Start testing---------------")
 exe_name = "census"
-evaluate_analog(
-    exe_name, model, test_loader, nsample=args.nsample, scaler=1, foldername=foldername
-)
+# evaluate_analog(
+#     exe_name, model, test_loader, nsample=args.nsample, scaler=1, foldername=foldername
+# )
 ###
 evaluate_analog_all(
     exe_name, model, full_loader, nsample=args.nsample, scaler=1, foldername=foldername
