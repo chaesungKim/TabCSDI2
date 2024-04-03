@@ -26,7 +26,9 @@ def produce_NA(X, p_miss, mecha="MAR", opt=None, p_obs=None, q=None, seed=0): ##
         X = X.astype(np.float32)
         X = torch.from_numpy(X)
     
-    np.random.seed(seed);torch.manual_seed(seed) ###
+    if type(seed) == int: ###
+        np.random.seed(seed);torch.manual_seed(seed) ###
+
     if mecha == "MAR":
         mask = MAR_mask(X, p_miss, p_obs).double()
     elif mecha == "MNAR" and opt == "logistic":
@@ -337,20 +339,12 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
     np.random.seed(seed + 1)
     np.random.shuffle(indlist)
 
-    # 5-fold test
-    tmp_ratio = 1 / nfold
-    start = (int)((nfold - 1) * len(dataset) * tmp_ratio)
-    end = (int)(nfold * len(dataset) * tmp_ratio)
-
     full_index = indlist ### 
-    test_index = indlist[start:end]
-    remain_index = np.delete(indlist, np.arange(start, end))
 
-    np.random.shuffle(remain_index)
-    num_train = (int)(len(remain_index) * 0.75) ### valid set도 만들기 위해 조정. 1->0.75
-    ### 결과적으로 train:valid:test = 3:1:1 = 12000:4000:4000
-    train_index = remain_index[:num_train]
-    valid_index = remain_index[num_train:]
+    num_train = (int)(len(indlist) * 0.80) ### valid set도 만들기 위해 조정.
+    ### 결과적으로 train:valid:test = 4:1:0 = 16000:4000:0
+    train_index = indlist[:num_train]
+    valid_index = indlist[num_train:]
 
     # Here we perform max-min normalization.
     processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_max-min_norm.pk"
@@ -411,14 +405,14 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
     )
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=0)
 
-    test_dataset = tabular_dataset(
-        use_index_list=test_index, mecha1=mecha1, mecha2=mecha2, seed=seed
-    )
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=0)
+    # test_dataset = tabular_dataset(
+    #     use_index_list=test_index, mecha1=mecha1, mecha2=mecha2, seed=seed
+    # )
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=0)
 
     print(f"Full dataset size: {len(full_dataset)}")
     print(f"Training dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(valid_dataset)}")
-    print(f"Testing dataset size: {len(test_dataset)}")
+    # print(f"Testing dataset size: {len(test_dataset)}")
 
-    return full_loader, train_loader, valid_loader, test_loader
+    return full_loader, train_loader, valid_loader #test_loader
