@@ -5,31 +5,7 @@ from src.diff_models_table import diff_CSDI
 import yaml
 
 ###
-from utils import *
-
-def produce_NA(X, p_miss, mecha="MAR", opt=None, p_obs=None, q=None, seed=0):
-    
-    to_torch = torch.is_tensor(X)
-    
-    if not to_torch:
-        X = X.astype(np.float32)
-        X = torch.from_numpy(X)
-    if type(seed) == int: ###
-        np.random.seed(seed);torch.manual_seed(seed) ###
-
-    if mecha == "MAR":
-        mask = MAR_mask(X, p_miss, p_obs).double()
-    elif mecha == "MNAR" and opt == "logistic":
-        mask = MNAR_mask_logistic(X, p_miss, p_obs).double()
-    elif mecha == "MNAR" and opt == "quantile":
-        mask = MNAR_mask_quantiles(X, p_miss, q, 1-p_obs).double()
-    elif mecha == "MNAR" and opt == "selfmasked":
-        mask = MNAR_self_mask_logistic(X, p_miss).double()
-    else:
-        mask = (torch.rand(X.shape) < p_miss).double()
-
-    return mask
-###
+from utils2 import *
 
 
 class CSDI_base(nn.Module):
@@ -45,9 +21,9 @@ class CSDI_base(nn.Module):
         self.is_unconditional = config["model"]["is_unconditional"]
         self.target_strategy = config["model"]["target_strategy"]
         ### 추가적인 args 받게 하기. get_randmask에서 필요
-        self.mecha = config["model"]["mecha"]
-        self.missing_ratio = config["model"]["test_missing_ratio"]
-        self.p_obs = config["model"]["p_obs"]
+        self.mecha2 = config["model"]["mecha2"]
+        self.m_ratio2 = config["model"]["m_ratio2"]
+        self.m_cols = config["model"]["m_cols"]
         ###
 
         self.emb_total_dim = self.emb_time_dim + self.emb_feature_dim
@@ -117,7 +93,7 @@ class CSDI_base(nn.Module):
         # print(data.shape)
         data = np.squeeze(data,axis=1) ###
         # print(type(data))
-        masks = produce_NA(data, p_miss=self.missing_ratio, p_obs=self.p_obs, mecha=self.mecha, opt='logistic', seed=None) ### seed 적용 안 되도록
+        masks = produce_NA(data, mecha=self.mecha2, m_ratio=self.m_ratio2, m_cols=self.m_cols, opt='selfmasked', seed=None) ### seed 적용 안 되도록
         masks = (1-np.array(masks))
         observed_mask = np.squeeze(np.array(observed_mask.cpu()),axis=1) # (64,15)
         masks = masks * observed_mask

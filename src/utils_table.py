@@ -1107,3 +1107,22 @@ def get_real(model, full_loader, foldername=""):
                 pickle.dump(
                     [all_real], f,)
 
+def get_real_valid(model, val_loader, foldername=""):
+
+    torch.manual_seed(0)
+    np.random.seed(0)
+    with torch.no_grad():
+        model.eval()
+        all_real = []
+        with tqdm(val_loader, mininterval=5.0, maxinterval=50.0) as it:
+            for batch_no, test_batch in enumerate(it, start=1):
+                real = model.get_real_data(test_batch) ###
+                all_real.append(real)
+
+        with open(
+                foldername + "/valid_real_data" + ".pk", "wb" ###
+            ) as f:
+                all_real = torch.cat(all_real, dim=0)
+                pickle.dump(
+                    [all_real], f,)
+
