@@ -6,25 +6,25 @@ import yaml
 import os
 
 from src.main_model_table import TabCSDI
-from src.utils_table import train, evaluate_analog, evaluate_analog_all, get_real
+from src.utils_table import train, evaluate_analog, evaluate_analog_all, get_real, get_real_valid
 from dataset_census.dataset_census_analog2 import get_dataloader
 
 parser = argparse.ArgumentParser(description="TabCSDI")
 parser.add_argument("--config", type=str, default="census_onehot_analog.yaml")
 parser.add_argument("--device", default="cuda", help="Device")
 parser.add_argument("--seed", type=int, default=1)
-parser.add_argument("--testmissingratio", type=float, default=0.2)
 parser.add_argument("--nfold", type=int, default=5, help="for 5-fold test")
 parser.add_argument("--unconditional", action="store_true", default=0)
 parser.add_argument("--modelfolder", type=str, default="")
-parser.add_argument("--nsample", type=int, default=100)
-parser.add_argument("--mecha", type=str, default="MAR")
-parser.add_argument("--opt", type=str, default="logistic")
-parser.add_argument("--p_obs", type=float, default=0.2)
+parser.add_argument("--nsample", type=int, default=30)
+parser.add_argument("--m_ratio2", type=float, default=0.2) # testmissingratio 대신
+parser.add_argument("--mecha2", type=str, default="MAR")
+parser.add_argument("--opt", type=str, default="selfmasked")
 ### missingratio, mecha, p_obs 1 추가 (2차(gt_mask)가 기본, 1차는 1 붙은거(observed_masks))
-parser.add_argument("--missingratio1", type=float, default=0.2)
+parser.add_argument("--m_ratio1", type=float, default=0.2)
 parser.add_argument("--mecha1", type=str, default="MAR")
-parser.add_argument("--p_obs1", type=float, default=0.2)
+parser.add_argument("--m_cols", type=list, default=[1, 3, 5, 6, 7, 8, 9, 13, 14])
+
 
 args = parser.parse_args()
 print(args)
@@ -40,17 +40,18 @@ with open(path, "r") as f:
     config = yaml.safe_load(f)
 
 config["model"]["is_unconditional"] = args.unconditional
-config["model"]["test_missing_ratio"] = args.testmissingratio
+config["model"]["m_ratio2"] = args.m_ratio2
 ###
-config["model"]["mecha"] = args.mecha
-config["model"]["p_obs"] = args.p_obs
+config["model"]["mecha2"] = args.mecha2
+config["model"]["m_cols"] = args.m_cols
 ###
 
 print(json.dumps(config, indent=4))
 
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+col_type = 'missing_cat' if args.m_cols ==[1, 3, 5, 6, 7, 8, 9, 13, 14] else 'missing_num' if args.m_cols == [0,2,4,10,11,12] else 'random'
 # foldername = "./save/census_fold" + str(args.nfold) + "_" + current_time + "/"
-foldername = "./save/census_analog_fold" + str(args.nfold) + "/" + args.mecha1 + args.mecha + "_" + current_time + "/" ###
+foldername = "./save/census_analog_fold" + str(args.nfold) + "/" + args.mecha1 + args.mecha2 + "_" + col_type + "/" ### current_time 일단 뺌
 print("model folder:", foldername)
 os.makedirs(foldername, exist_ok=True)
 with open(foldername + "config.json", "w") as f:
@@ -60,13 +61,12 @@ full_loader, train_loader, valid_loader = get_dataloader( ### test_loader 뺌
     seed=args.seed,
     nfold=args.nfold,
     batch_size=config["train"]["batch_size"],
-    missing_ratio1=args.missingratio1,
+    m_ratio1=args.m_ratio1,
     mecha1=args.mecha1,
-    p_obs1=args.p_obs1,
-    missing_ratio2=config["model"]["test_missing_ratio"],
-    mecha2=config["model"]["mecha"],
+    m_ratio2=config["model"]["m_ratio2"],
+    mecha2=config["model"]["mecha2"],
     opt=args.opt,
-    p_obs2=config["model"]["p_obs"]
+    m_cols=args.m_cols
 )
 
 model = TabCSDI(config, args.device).to(args.device)
@@ -92,3 +92,4 @@ evaluate_analog_all(
 )
 ##
 # get_real(model, full_loader, foldername=foldername)
+# get_real_valid(model, valid_loader, foldername=foldername)
