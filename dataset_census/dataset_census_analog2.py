@@ -14,42 +14,12 @@ ssl._create_default_https_context = ssl._create_unverified_context
 import torch
 # import wget
 # wget.download('https://raw.githubusercontent.com/BorisMuzellec/MissingDataOT/master/utils.py')
-from utils import *
-
-# Function produce_NA for generating missing values
-
-def produce_NA(X, p_miss, mecha="MAR", opt=None, p_obs=None, q=None, seed=0): ###
-    
-    to_torch = torch.is_tensor(X)
-    
-    if not to_torch:
-        X = X.astype(np.float32)
-        X = torch.from_numpy(X)
-    
-    if type(seed) == int: ###
-        np.random.seed(seed);torch.manual_seed(seed) ###
-
-    if mecha == "MAR":
-        mask = MAR_mask(X, p_miss, p_obs).double()
-    elif mecha == "MNAR" and opt == "logistic":
-        mask = MNAR_mask_logistic(X, p_miss, p_obs).double()
-    elif mecha == "MNAR" and opt == "quantile":
-        mask = MNAR_mask_quantiles(X, p_miss, q, 1-p_obs).double()
-    elif mecha == "MNAR" and opt == "selfmasked":
-        mask = MNAR_self_mask_logistic(X, p_miss).double()
-    else:
-        mask = (torch.rand(X.shape) < p_miss).double()
-    
-    # X_nas = X.clone()
-    # X_nas[mask.bool()] = np.nan
-    
-    # return X_nas.double() # tensor type
-    return mask
+from utils2 import *
 
 
 def process_func(path: str, cat_list, encode=True, 
-                 mecha1 = 'MAR', missing_ratio1 = 0.4, p_obs1 = 0.5, 
-                 mecha2 = 'MAR', missing_ratio2 = 0.4, p_obs2 = 0.5, opt="logistic"):
+                 mecha1 = 'MAR', m_ratio1 = 0.2, m_cols = None, 
+                 mecha2 = 'MAR', m_ratio2 = 0.2, opt="selfmasked"):
     def sortby(x):
         if isinstance(x, str):
             return ord(x[1])
@@ -77,7 +47,7 @@ def process_func(path: str, cat_list, encode=True,
     data_enc = encoder.fit_transform(data) # 범주형 변수를 순서형 변수로 인코딩
     data_observed_values = data_enc.values # 마스킹 없는 complete 데이터를 array로
     # observed_masks 생성
-    observed_masks = produce_NA(data_observed_values, p_miss=missing_ratio1, p_obs=p_obs1, mecha=mecha1, opt=opt) # missing:1
+    observed_masks = produce_NA(data_observed_values, mecha=mecha1, opt=opt, m_ratio=m_ratio1, m_cols=m_cols) # missing:1
     observed_masks = np.array(observed_masks) # array 처리
     observed_masks = (1-observed_masks).astype(bool)
     data2 = np.array(data, copy=True) ### observed_values 대신 data2 일단 사용
@@ -104,7 +74,7 @@ def process_func(path: str, cat_list, encode=True,
     new_df2.replace(np.nan, 0, inplace=True)
     new_observed_values2 = new_df2.values ### 1차 결측치 처리 하고 ordinal encoding후 nan을 0으로 바꾼 데이터프레임의 array
 
-    gt_masks = produce_NA(new_observed_values2, p_miss=missing_ratio2, p_obs=p_obs2, mecha=mecha2, opt=opt, seed=1) ### seed 추가.
+    gt_masks = produce_NA(new_observed_values2, mecha=mecha2, opt=opt, m_ratio=m_ratio2, m_cols=m_cols, seed=1) ### seed 추가.
     gt_masks = (1-np.array(gt_masks)) #.astype(bool) # 1: observed, 0: missing ### 아 근데 이거... 맞나 모르겠음
     gt_masks = gt_masks * observed_masks # observed_masks에서 0인 것은 0으로 처리해 두 mask를 합침
     ###
@@ -259,16 +229,18 @@ def process_func(path: str, cat_list, encode=True,
 class tabular_dataset(Dataset):
     # eval_length should be equal to attributes number.
     def __init__(self, eval_length=39, use_index_list=None, seed=0,
-                 mecha1 = 'MAR', missing_ratio1 = 0.4, p_obs1 = 0.5, 
-                 mecha2 = 'MAR', missing_ratio2 = 0.4, p_obs2 = 0.5, opt="logistic"):
+                 mecha1 = 'MAR', m_ratio1 = 0.2, m_cols=[0],
+                 mecha2 = 'MAR', m_ratio2 = 0.2, opt="selfmasked"):
         self.eval_length = eval_length
         np.random.seed(seed)
 
+        col_type = 'missing_cat' if m_cols ==[1, 3, 5, 6, 7, 8, 9, 13, 14] else 'missing_num' if m_cols == [0,2,4,10,11,12] else 'random'
+
         dataset_path = "./data_census_analog/adult_trim.data"
         processed_data_path = (
-            f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}.pk"
+            f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_{col_type}.pk"
         )
-        processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_max-min_norm.pk"
+        processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_{col_type}_max-min_norm.pk"
 
         cat_list = [1, 3, 5, 6, 7, 8, 9, 13, 14]
         if not os.path.isfile(processed_data_path):
@@ -281,8 +253,8 @@ class tabular_dataset(Dataset):
             ) = process_func(
                 dataset_path,
                 cat_list=cat_list,
-                missing_ratio1=missing_ratio1,p_obs1=p_obs1, mecha1=mecha1, 
-                missing_ratio2=missing_ratio2,p_obs2=p_obs2, mecha2=mecha2, 
+                mecha1=mecha1, m_ratio1=m_ratio1, m_cols=m_cols,
+                mecha2=mecha2, m_ratio2=m_ratio2,
                 opt=opt,
                 encode=True,
             ) ###
@@ -328,10 +300,11 @@ class tabular_dataset(Dataset):
 
 
 def get_dataloader(seed=1, nfold=5, batch_size=16, 
-                   missing_ratio1=0.4, p_obs1=0.5, mecha1='MAR', 
-                   missing_ratio2=0.4, p_obs2=0.5, mecha2='MAR', opt='logistic'): ###
-    dataset = tabular_dataset(missing_ratio1=missing_ratio1, p_obs1=p_obs1, mecha1=mecha1, 
-                              missing_ratio2=missing_ratio2, p_obs2=p_obs2, mecha2=mecha2, opt=opt, seed=seed) ###
+                   m_ratio1=0.2, mecha1='MAR', m_cols=[0],
+                   m_ratio2=0.2, mecha2='MAR', opt='selfmasked'): ###
+    dataset = tabular_dataset(m_ratio1=m_ratio1, mecha1=mecha1, m_cols=m_cols,
+                              m_ratio2=m_ratio2, mecha2=mecha2, opt=opt, seed=seed) ###
+    
     print(f"Dataset size:{len(dataset)} entries")
 
     indlist = np.arange(len(dataset))
@@ -347,7 +320,8 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
     valid_index = indlist[num_train:]
 
     # Here we perform max-min normalization.
-    processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_max-min_norm.pk"
+    col_type = 'missing_cat' if m_cols ==[1, 3, 5, 6, 7, 8, 9, 13, 14] else 'missing_num' if m_cols == [0,2,4,10,11,12] else 'random'
+    processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_{col_type}_max-min_norm.pk"
     if not os.path.isfile(processed_data_path_norm):
         print(
             "--------------Dataset has not been normalized yet. Perform data normalization and store the mean value of each column.--------------"
@@ -391,17 +365,17 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
 
     # Create datasets and corresponding data loaders objects.
     full_dataset = tabular_dataset( ## 전체 데이터셋을 가져오는 로더
-        use_index_list=full_index, mecha1=mecha1, mecha2=mecha2, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
+        use_index_list=full_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
     )
     full_loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=0)
 
     train_dataset = tabular_dataset(
-        use_index_list=train_index, mecha1=mecha1, mecha2=mecha2, seed=seed
+        use_index_list=train_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
     )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=1)
 
     valid_dataset = tabular_dataset(
-        use_index_list=valid_index, mecha1=mecha1, mecha2=mecha2, seed=seed
+        use_index_list=valid_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
     )
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=0)
 
