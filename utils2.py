@@ -419,13 +419,17 @@ def pick_coeffs(X, idxs_obs=None, idxs_nas=None, self_mask=False):
     if self_mask:
         coeffs = torch.randn(d)
         Wx = X * coeffs
-        coeffs /= torch.std(Wx, 0)
+        std_Wx = torch.std(Wx, 0)
+        safe_std_Wx = torch.clamp(std_Wx, min=0.001)
+        coeffs /= safe_std_Wx
     else:
         d_obs = len(idxs_obs)
         d_na = len(idxs_nas)
         coeffs = torch.randn(d_obs, d_na)
         Wx = X[:, idxs_obs].mm(coeffs)
-        coeffs /= torch.std(Wx, 0, keepdim=True)
+        std_Wx = torch.std(Wx, 0, keepdim=True)
+        safe_std_Wx = torch.clamp(std_Wx, min=0.001)
+        coeffs /= safe_std_Wx
     return coeffs
 
 
@@ -436,14 +440,14 @@ def fit_intercepts(X, coeffs, p, self_mask=False):
         for j in range(d):
             def f(x):
                 return torch.sigmoid(X * coeffs[j] + x).mean().item() - p
-            intercepts[j] = optimize.bisect(f, -50, 50)
+            intercepts[j] = optimize.bisect(f, -100, 100)
     else:
         d_obs, d_na = coeffs.shape
         intercepts = torch.zeros(d_na)
         for j in range(d_na):
             def f(x):
                 return torch.sigmoid(X.mv(coeffs[:, j]) + x).mean().item() - p
-            intercepts[j] = optimize.bisect(f, -50, 50)
+            intercepts[j] = optimize.bisect(f, -100, 100)
     return intercepts
 
 def produce_NA(X, mecha="MAR", opt=None, m_ratio=0.2, m_cols=[0], seed=0): ###
