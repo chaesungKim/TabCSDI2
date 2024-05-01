@@ -6,6 +6,7 @@ import yaml
 
 ###
 from utils2 import *
+import pickle
 
 
 class CSDI_base(nn.Module):
@@ -23,7 +24,23 @@ class CSDI_base(nn.Module):
         ### 추가적인 args 받게 하기. get_randmask에서 필요
         self.mecha2 = config["model"]["mecha2"]
         self.m_ratio2 = config["model"]["m_ratio2"]
-        self.m_cols = config["model"]["m_cols"]
+
+        with open("./data_census_analog/column_dict.pk", "rb") as f:
+            col_dict = pickle.load(f)
+        m_cols = config["model"]["m_cols"]
+        new_m_cols = []
+        for k in m_cols:
+            if k in col_dict:
+                new_m_cols.extend(col_dict[k])
+        self.m_cols = new_m_cols
+        ###
+        col_list = []
+        for k in range(len(col_dict)):
+          col_list.extend(col_dict[k]) # [0,1,2,...,37,38]
+        ###
+        p = self.m_ratio2 * len(col_dict) / len(m_cols)
+        new_m_ratio2 = p * len(new_m_cols) / len(col_list)
+        self.train_m_ratio2 = new_m_ratio2
         ###
 
         self.emb_total_dim = self.emb_time_dim + self.emb_feature_dim
@@ -90,10 +107,9 @@ class CSDI_base(nn.Module):
         # observed_data에서 마스킹을 만들거임. train data만의 gt_mask라고 생각하면 될듯?
         # observed_data의 타입에 따른 수정이 필요할지도: observed_data는 (B, K, L * C) -> 2차원(B, L) array로 바꾸어야 함. 
         data = np.array(observed_data_org.cpu())
-        # print(data.shape)
         data = np.squeeze(data,axis=1) ###
-        # print(type(data))
-        masks = produce_NA(data, mecha=self.mecha2, m_ratio=self.m_ratio2, m_cols=self.m_cols, opt='selfmasked', seed=None) ### seed 적용 안 되도록
+        # train_m_ratio2로 바꿈
+        masks = produce_NA(data, mecha=self.mecha2, m_ratio=self.train_m_ratio2, m_cols=self.m_cols, opt='selfmasked', seed=None) ### seed 적용 안 되도록
         masks = (1-np.array(masks))
         observed_mask = np.squeeze(np.array(observed_mask.cpu()),axis=1) # (64,15)
         masks = masks * observed_mask
