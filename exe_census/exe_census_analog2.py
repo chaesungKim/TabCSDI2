@@ -17,13 +17,14 @@ parser.add_argument("--nfold", type=int, default=5, help="for 5-fold test")
 parser.add_argument("--unconditional", action="store_true", default=0)
 parser.add_argument("--modelfolder", type=str, default="")
 parser.add_argument("--nsample", type=int, default=30)
+parser.add_argument("--batch", type=int, default=64) ## 추가
 parser.add_argument("--m_ratio2", type=float, default=0.2) # testmissingratio 대신
 parser.add_argument("--mecha2", type=str, default="MAR")
 parser.add_argument("--opt", type=str, default="selfmasked")
 ### missingratio, mecha, p_obs 1 추가 (2차(gt_mask)가 기본, 1차는 1 붙은거(observed_masks))
 parser.add_argument("--m_ratio1", type=float, default=0.2)
 parser.add_argument("--mecha1", type=str, default="MAR")
-parser.add_argument("--m_cols", type=list, default=[1, 3, 5, 6, 7, 8, 9, 13, 14])
+parser.add_argument("--m_type", type=str, default="missing_cat")
 
 
 args = parser.parse_args()
@@ -41,23 +42,25 @@ with open(path, "r") as f:
 
 config["model"]["is_unconditional"] = args.unconditional
 config["model"]["m_ratio2"] = args.m_ratio2
+config["train"]["batch_size"] = args.batch ## 추가
 ###
 config["model"]["mecha2"] = args.mecha2
-config["model"]["m_cols"] = args.m_cols
+# config["model"]["m_type"] = args.m_type
 ###
 
 print(json.dumps(config, indent=4))
 
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-col_type = 'missing_cat' if args.m_cols ==[1, 3, 5, 6, 7, 8, 9, 13, 14] else 'missing_num' if args.m_cols == [0,2,4,10,11,12] else 'random'
+m_cols = [1, 3, 5, 6, 7, 8, 9, 13, 14] if args.m_type == 'missing_cat' else [0,2,4,10,11,12] if args.m_type == 'missing_num' else [0]
 # foldername = "./save/census_fold" + str(args.nfold) + "_" + current_time + "/"
-foldername = "./save/census_analog_fold" + str(args.nfold) + "/" + args.mecha1 + args.mecha2 + "_" + col_type + "/" ### current_time 일단 뺌
+foldername = "./save/census_analog_fold" + str(args.nfold) + "/" + args.mecha1 + args.mecha2 + "_" + args.m_type + "/" ### current_time 일단 뺌
+config["model"]["m_cols"] = m_cols
 print("model folder:", foldername)
 os.makedirs(foldername, exist_ok=True)
 with open(foldername + "config.json", "w") as f:
     json.dump(config, f, indent=4)
 
-full_loader, train_loader, valid_loader = get_dataloader( ### test_loader 뺌
+full_loader, sampled_loader, train_loader, valid_loader = get_dataloader( ### test_loader 뺌
     seed=args.seed,
     nfold=args.nfold,
     batch_size=config["train"]["batch_size"],
@@ -66,7 +69,7 @@ full_loader, train_loader, valid_loader = get_dataloader( ### test_loader 뺌
     m_ratio2=config["model"]["m_ratio2"],
     mecha2=config["model"]["mecha2"],
     opt=args.opt,
-    m_cols=args.m_cols
+    m_cols=config["model"]["m_cols"]
 )
 
 model = TabCSDI(config, args.device).to(args.device)
@@ -88,7 +91,7 @@ exe_name = "census"
 # )
 ###
 evaluate_analog_all(
-    exe_name, model, full_loader, nsample=args.nsample, scaler=1, foldername=foldername
+    exe_name, model, sampled_loader, nsample=args.nsample, scaler=1, foldername=foldername
 )
 ##
 # get_real(model, full_loader, foldername=foldername)
