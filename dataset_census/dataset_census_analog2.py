@@ -81,14 +81,18 @@ def process_func(path: str, cat_list, encode=True,
 
     # new_observed_values2 = new_df2.values
     for col in cat_list:
-        cat_num = data1.iloc[:, col].nunique() # 범주형 하나 안에 있는 카테고리 개수
-        bits_num = int(math.log2(cat_num)) + 1 # 그 카테고리를 이진으로 표현시 필요한 컬럼 수
-        num_bits_list.append(bits_num)
-        map_target = [i for i in range(1, cat_num + 1)]
+        ##### 옮기기전 위치 #####
 
         unique_obj = list(data1.iloc[:, col].unique())
         # exclude 0
         unique_obj = [i for i in unique_obj if i != 0]
+        #### 여기로 옮김 #####
+        cat_num = data1.iloc[:, col].nunique() # 범주형 하나 안에 있는 카테고리 개수
+        # cat_num = len(unique_obj)
+        bits_num = int(math.log2(cat_num)) + 1 # 그 카테고리를 이진으로 표현시 필요한 컬럼 수
+        num_bits_list.append(bits_num)
+        map_target = [i for i in range(1, cat_num + 1)]
+        #####
 
         unique_obj.sort(key=sortby)
         map_dict = {
@@ -133,14 +137,18 @@ def process_func(path: str, cat_list, encode=True,
     last_bits_num = 0
     
     for col in cat_list:
-        cat_num = data.iloc[:, col].nunique() # 범주형 하나 안에 있는 카테고리 개수
-        bits_num = int(math.log2(cat_num)) + 1 # 그 카테고리를 이진으로 표현시 필요한 컬럼 수
-        num_bits_list.append(bits_num)
-        map_target = [i for i in range(1, cat_num + 1)]
+        ##### 옮기기 전 위치 #####
 
         unique_obj = list(data.iloc[:, col].unique())
         # exclude 0
         unique_obj = [i for i in unique_obj if i != 0]
+        ##### 여기로 옮김 #####
+        cat_num = data.iloc[:, col].nunique() # 범주형 하나 안에 있는 카테고리 개수
+        # cat_num = len(unique_obj)
+        bits_num = int(math.log2(cat_num)) + 1 # 그 카테고리를 이진으로 표현시 필요한 컬럼 수
+        num_bits_list.append(bits_num)
+        map_target = [i for i in range(1, cat_num + 1)]
+        #####
 
         unique_obj.sort(key=sortby)
         map_dict = {
@@ -209,6 +217,16 @@ def process_func(path: str, cat_list, encode=True,
 
     with open("./data_census_analog/transform.pk", "wb") as f:
         pickle.dump([tot_map_dict, cont_cols, saved_cat_cols], f)
+
+    ###
+    col_dict = {cat_list[i]: list(saved_cat_cols.values())[i] for i in range(len(cat_list))}
+    cont_list = [x for x in range(15) if x not in cat_list]
+    for k, v in zip(cont_list, cont_cols):
+        col_dict[k] = [v]
+    col_dict = {key: col_dict[key] for key in sorted(col_dict)}
+    with open("./data_census_analog/column_dict.pk", "wb") as f:
+        pickle.dump(col_dict, f)
+    ###
 
     # NaN is replaced by zero
     new_observed_values = np.nan_to_num(new_observed_values)
@@ -309,6 +327,12 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
 
     indlist = np.arange(len(dataset))
 
+    ###
+    adult = pd.read_csv('./data_census_analog/adult_trim.data', header=None)
+    adult_srtd = adult.sort_values(by=[2])
+    sampled_index = [adult_srtd.index[i] for i in range(0, 20000, 5)]
+    ###
+
     np.random.seed(seed + 1)
     np.random.shuffle(indlist)
 
@@ -369,6 +393,11 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
     )
     full_loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=0)
 
+    sampled_dataset = tabular_dataset( ## 전체 데이터셋을 가져오는 로더
+        use_index_list=sampled_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
+    )
+    sampled_loader = DataLoader(sampled_dataset, batch_size=batch_size, shuffle=0)
+
     train_dataset = tabular_dataset(
         use_index_list=train_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
     )
@@ -389,4 +418,4 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
     print(f"Validation dataset size: {len(valid_dataset)}")
     # print(f"Testing dataset size: {len(test_dataset)}")
 
-    return full_loader, train_loader, valid_loader #test_loader
+    return full_loader, sampled_loader, train_loader, valid_loader #test_loader
