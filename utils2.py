@@ -332,15 +332,23 @@ def MNAR_self_mask_logistic(X, m_ratio, m_cols): # p):
     idxs_nas = np.array(m_cols)
     p = m_ratio * d / len(m_cols)
 
+
     ### Pick coefficients so that W^Tx has unit variance (avoids shrinking)
     coeffs = pick_coeffs(X[:, idxs_nas], self_mask=True)
     ### Pick the intercepts to have a desired amount of missing values
-    intercepts = fit_intercepts(X[:, idxs_nas], coeffs, p, self_mask=True)
+    intercepts = fit_intercepts(X[:, idxs_nas], coeffs, p, self_mask=True) ## nas 열 길이 만큼
 
     ps = torch.sigmoid(X[:, idxs_nas] * coeffs + intercepts)
 
     ber = torch.rand(n, len(idxs_nas)) if to_torch else np.random.rand(n, len(idxs_nas))
     mask[:, idxs_nas] = ber < ps if to_torch else ber < ps.numpy()
+
+    ### error 열에 대한 처리
+    error_idxs = (intercepts == -100).nonzero(as_tuple=True)[0]
+    error_idxs = idxs_nas[error_idxs.numpy()]
+    for col in error_idxs:
+      rand = torch.rand(n)
+      mask[:,col] = rand<p
 
     return mask
 
@@ -440,14 +448,20 @@ def fit_intercepts(X, coeffs, p, self_mask=False):
         for j in range(d):
             def f(x):
                 return torch.sigmoid(X * coeffs[j] + x).mean().item() - p
-            intercepts[j] = optimize.bisect(f, -100, 100)
+            try:
+              intercepts[j] = optimize.bisect(f, -100, 100)
+            except ValueError:
+              intercepts[j] = -100
     else:
         d_obs, d_na = coeffs.shape
         intercepts = torch.zeros(d_na)
         for j in range(d_na):
             def f(x):
                 return torch.sigmoid(X.mv(coeffs[:, j]) + x).mean().item() - p
-            intercepts[j] = optimize.bisect(f, -100, 100)
+            try:
+              intercepts[j] = optimize.bisect(f, -100, 100)
+            except ValueError:
+              intercepts[j] = -100
     return intercepts
 
 def produce_NA(X, mecha="MAR", opt=None, m_ratio=0.2, m_cols=[0], seed=0): ###
