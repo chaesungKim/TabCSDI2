@@ -83,12 +83,13 @@ def process_func(path: str, cat_list, encode=True,
     for col in cat_list:
         ##### 옮기기전 위치 #####
 
-        unique_obj = list(data1.iloc[:, col].unique())
+        # unique_obj = list(data1.iloc[:, col].unique())
+        unique_obj = list(data.iloc[:, col].unique())
         # exclude 0
         unique_obj = [i for i in unique_obj if i != 0]
         #### 여기로 옮김 #####
-        cat_num = data1.iloc[:, col].nunique() # 범주형 하나 안에 있는 카테고리 개수
-        # cat_num = len(unique_obj)
+        # cat_num = data1.iloc[:, col].nunique() # 범주형 하나 안에 있는 카테고리 개수
+        cat_num = data.iloc[:, col].nunique()
         bits_num = int(math.log2(cat_num)) + 1 # 그 카테고리를 이진으로 표현시 필요한 컬럼 수
         num_bits_list.append(bits_num)
         map_target = [i for i in range(1, cat_num + 1)]
