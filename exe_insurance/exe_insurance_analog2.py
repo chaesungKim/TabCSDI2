@@ -44,6 +44,7 @@ config["model"]["is_unconditional"] = args.unconditional
 config["model"]["m_ratio2"] = args.m_ratio2
 config["train"]["batch_size"] = args.batch ## 추가
 ###
+config["model"]["name"] = "insurance"
 config["model"]["mecha2"] = args.mecha2
 # config["model"]["m_type"] = args.m_type
 ###
