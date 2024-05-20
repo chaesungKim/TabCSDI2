@@ -51,7 +51,7 @@ config["model"]["mecha2"] = args.mecha2
 print(json.dumps(config, indent=4))
 
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-m_cols = [1, 3, 5, 6, 7, 8, 9, 13, 14] if args.m_type == 'missing_cat' else [0,2,4,10,11,12] if args.m_type == 'missing_num' else [0]
+m_cols = [1, 3, 5, 6, 7, 8, 9, 13, 14] if args.m_type == 'missing_cat' else [0,2,4,10,11,12] if args.m_type == 'missing_num' else [1,2,3,4,6,7,11,12]
 # foldername = "./save/census_fold" + str(args.nfold) + "_" + current_time + "/"
 foldername = "./save/census_analog_fold" + str(args.nfold) + "/" + args.mecha1 + args.mecha2 + "_" + args.m_type + "/" ### current_time 일단 뺌
 config["model"]["m_cols"] = m_cols
@@ -91,7 +91,7 @@ exe_name = "census"
 # )
 ###
 evaluate_analog_all(
-    exe_name, model, sampled_loader, nsample=args.nsample, scaler=1, foldername=foldername
+    exe_name, model, sampled_loader, nsample=args.nsample, scaler=1, foldername=foldername, seed=args.seed
 )
 ##
 # get_real(model, full_loader, foldername=foldername)
