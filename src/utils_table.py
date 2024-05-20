@@ -935,11 +935,15 @@ def evaluate_ft_all(
                 print("ERR_CATE:", err_total / err_total_eval_nums)
 
 def evaluate_analog_all( ### full_loader 사용하기
-    exe_name, model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldername=""
+    exe_name, model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldername="", seed=0
 ):
 
     if exe_name == "census":
         with open("./data_census_analog/transform.pk", "rb") as f:
+            _, cont_cols, saved_cat_dict = pickle.load(f)
+
+    elif exe_name == "insurance":
+        with open("./data_insurance/transform.pk", "rb") as f:
             _, cont_cols, saved_cat_dict = pickle.load(f)
 
     torch.manual_seed(0)
@@ -1046,7 +1050,7 @@ def evaluate_analog_all( ### full_loader 사용하기
 
             # Use folloing code for saving generated results.
             with open(
-                foldername + "/full_generated_outputs_nsample" + str(nsample) + ".pk", "wb" ###
+                foldername + "/full_generated_outputs_nsample" + str(nsample) + "seed_" + str(seed) + ".pk", "wb" ###
             ) as f:
                 all_real = torch.cat(all_real, dim=0) ###
                 all_target = torch.cat(all_target, dim=0)
@@ -1071,7 +1075,7 @@ def evaluate_analog_all( ### full_loader 사용하기
                     f,
                 )
 
-            with open(foldername + "/full_result_nsample" + str(nsample) + ".pk", "wb") as f: ###
+            with open(foldername + "/full_result_nsample" + str(nsample) + "seed_" + str(seed) + ".pk", "wb") as f: ###
                 pickle.dump(
                     [
                         torch.mean(torch.sqrt(mse_total / evalpoints_total)).item(),

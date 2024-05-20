@@ -25,7 +25,9 @@ class CSDI_base(nn.Module):
         self.mecha2 = config["model"]["mecha2"]
         self.m_ratio2 = config["model"]["m_ratio2"]
 
-        with open("./data_census_analog/column_dict.pk", "rb") as f:
+        # with open("./data_census_analog/column_dict.pk", "rb") as f:
+        #     col_dict = pickle.load(f)
+        with open("./data_insurance/column_dict.pk", "rb") as f:
             col_dict = pickle.load(f)
         m_cols = config["model"]["m_cols"]
         new_m_cols = []
