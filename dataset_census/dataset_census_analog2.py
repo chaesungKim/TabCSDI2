@@ -19,7 +19,7 @@ from utils2 import *
 
 def process_func(path: str, cat_list, encode=True, 
                  mecha1 = 'MAR', m_ratio1 = 0.2, m_cols = None, 
-                 mecha2 = 'MAR', m_ratio2 = 0.2, opt="selfmasked"):
+                 mecha2 = 'MAR', m_ratio2 = 0.2, opt="selfmasked", seed=0): # seed 추가
     def sortby(x):
         if isinstance(x, str):
             return ord(x[1])
@@ -47,7 +47,7 @@ def process_func(path: str, cat_list, encode=True,
     data_enc = encoder.fit_transform(data) # 범주형 변수를 순서형 변수로 인코딩
     data_observed_values = data_enc.values # 마스킹 없는 complete 데이터를 array로
     # observed_masks 생성
-    observed_masks = produce_NA(data_observed_values, mecha=mecha1, opt=opt, m_ratio=m_ratio1, m_cols=m_cols) # missing:1
+    observed_masks = produce_NA(data_observed_values, mecha=mecha1, opt=opt, m_ratio=m_ratio1, m_cols=m_cols, seed=seed) # missing:1
     observed_masks = np.array(observed_masks) # array 처리
     observed_masks = (1-observed_masks).astype(bool)
     data2 = np.array(data, copy=True) ### observed_values 대신 data2 일단 사용
@@ -74,7 +74,7 @@ def process_func(path: str, cat_list, encode=True,
     new_df2.replace(np.nan, 0, inplace=True)
     new_observed_values2 = new_df2.values ### 1차 결측치 처리 하고 ordinal encoding후 nan을 0으로 바꾼 데이터프레임의 array
 
-    gt_masks = produce_NA(new_observed_values2, mecha=mecha2, opt=opt, m_ratio=m_ratio2, m_cols=m_cols, seed=1) ### seed 추가.
+    gt_masks = produce_NA(new_observed_values2, mecha=mecha2, opt=opt, m_ratio=m_ratio2, m_cols=m_cols, seed=seed+100) ### seed 추가.
     gt_masks = (1-np.array(gt_masks)) #.astype(bool) # 1: observed, 0: missing ### 아 근데 이거... 맞나 모르겠음
     gt_masks = gt_masks * observed_masks # observed_masks에서 0인 것은 0으로 처리해 두 mask를 합침
     ###
@@ -275,7 +275,7 @@ class tabular_dataset(Dataset):
                 mecha1=mecha1, m_ratio1=m_ratio1, m_cols=m_cols,
                 mecha2=mecha2, m_ratio2=m_ratio2,
                 opt=opt,
-                encode=True,
+                encode=True, seed=seed ## seed 추가
             ) ###
 
             with open(processed_data_path, "wb") as f:
@@ -337,7 +337,7 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
     np.random.seed(seed + 1)
     np.random.shuffle(indlist)
 
-    full_index = indlist ### 
+    full_index = indlist ###
 
     num_train = (int)(len(indlist) * 0.80) ### valid set도 만들기 위해 조정.
     ### 결과적으로 train:valid:test = 4:1:0 = 16000:4000:0
