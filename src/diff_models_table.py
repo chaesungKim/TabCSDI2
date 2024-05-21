@@ -98,13 +98,14 @@ class diff_CSDI(nn.Module):
 
 
         x = torch.sum(torch.stack(skip), dim=0) / math.sqrt(len(self.residual_layers))
-        # ps out = ps head(x)
+        # propensity head? (1)
         
         x = x.reshape(B, self.channels, K * L)
 
         x = self.output_projection1(x)
         x = F.relu(x)
         x = self.output_projection2(x)
+        # propensity head? (2)
         if self.config["mixed"]:
             x = x.permute(0, 2, 1)
             x = x.reshape(B, K, L * self.token_emb_dim)
