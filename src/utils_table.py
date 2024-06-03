@@ -17,8 +17,9 @@ def train(
     torch.manual_seed(0)
     np.random.seed(0)
     optimizer = Adam(model.parameters(), lr=config["lr"], weight_decay=1e-6)
+    seed = config["seed"]
     if foldername != "":
-        output_path = foldername + "/model.pth"
+        output_path = foldername + "/model_" + str(seed) + ".pth"
 
     p0 = int(0.25 * config["epochs"])
     p1 = int(0.5 * config["epochs"])

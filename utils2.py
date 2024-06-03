@@ -148,14 +148,16 @@ def MCAR_mask(X, m_ratio, m_cols):
         X = torch.from_numpy(X)
 
     mask = torch.zeros(n, d).bool() if to_torch else np.zeros((n, d)).astype(bool)
+    ps = torch.ones(n, d) if to_torch else np.ones((n, d))
 
-    p = m_ratio * d / len(m_cols)
+    p = m_ratio * d / len(m_cols) # ps 역할
 
     for col in m_cols:
         random_values = torch.rand(n)
         mask[:, col] = random_values < p
+        ps[:, col] = 1-p
 
-    return mask   
+    return mask, ps
 
 
 ##### Missing At Random ######
@@ -213,13 +215,19 @@ def MAR_mask(X, m_ratio, m_cols):
     ### Pick the intercepts to have a desired amount of missing values
     intercepts = fit_intercepts(X[:, idxs_obs], coeffs, p)
 
-    ps = torch.sigmoid(X[:, idxs_obs].mm(coeffs) + intercepts)
+    ps = torch.sigmoid(X[:, idxs_obs].mm(coeffs) + intercepts) # ps.shape: (n, len(idxs_nas))
 
     d_na = len(m_cols)
     ber = torch.rand(n, d_na)
     mask[:, idxs_nas] = ber < ps
 
-    return mask
+    ps_all = torch.ones(n, d)
+    i = 0
+    for col in idxs_nas:
+        ps_all[:, col] = 1-ps[:, i]
+        i += 1
+
+    return mask, ps_all
 
 ##### Missing not at random ######
 # 모든 컬럼에서 미싱 생성. 인풋변수가 MCAR로 생성된다는 차이. 그러면 
@@ -350,7 +358,14 @@ def MNAR_self_mask_logistic(X, m_ratio, m_cols): # p):
       rand = torch.rand(n)
       mask[:,col] = rand<p
 
-    return mask
+    # ps 저장
+    ps_all = torch.ones(n, d)
+    i = 0
+    for col in idxs_nas:
+        ps_all[:, col] = 1 - ps[:, i]
+        i += 1
+
+    return mask, ps_all
 
 def MNAR_mask_quantiles(X, p, q, p_params, cut='both', MCAR=False):
     """
@@ -476,19 +491,22 @@ def produce_NA(X, mecha="MAR", opt=None, m_ratio=0.2, m_cols=[0], seed=0): ###
         np.random.seed(seed);torch.manual_seed(seed) ###
 
     if mecha == "MAR":
-        mask = MAR_mask(X, m_ratio, m_cols).double()
+        mask, ps = MAR_mask(X, m_ratio, m_cols)
     elif mecha == "MNAR" and opt == "logistic":
-        mask = MNAR_mask_logistic(X, m_ratio, m_cols, exclude_inputs=True).double()
+        mask, ps = MNAR_mask_logistic(X, m_ratio, m_cols, exclude_inputs=True)
     # elif mecha == "MNAR" and opt == "quantile":
         # mask = MNAR_mask_quantiles(X, p_miss, q, 1-p_obs).double()
     elif mecha == "MNAR" and opt == "selfmasked":
-        mask = MNAR_self_mask_logistic(X, m_ratio, m_cols).double()
+        mask, ps = MNAR_self_mask_logistic(X, m_ratio, m_cols)
     else:
-        mask = MCAR_mask(X, m_ratio, m_cols).double()
+        mask, ps = MCAR_mask(X, m_ratio, m_cols)
+
+    mask = mask.double()
+    ps = ps.double()
     
     # X_nas = X.clone()
     # X_nas[mask.bool()] = np.nan
     
     # return X_nas.double() # tensor type
-    return mask
+    return mask, ps
 

@@ -113,12 +113,14 @@ class CSDI_base(nn.Module):
         data = np.array(observed_data_org.cpu())
         data = np.squeeze(data,axis=1) ###
         # train_m_ratio2로 바꿈
-        masks = produce_NA(data, mecha=self.mecha2, m_ratio=self.train_m_ratio2, m_cols=self.m_cols, opt='selfmasked', seed=None) ### seed 적용 안 되도록
+        masks, _ = produce_NA(data, mecha=self.mecha2, m_ratio=self.train_m_ratio2, m_cols=self.m_cols, opt='selfmasked', seed=None) ### seed 적용 안 되도록
         masks = (1-np.array(masks))
         observed_mask = np.squeeze(np.array(observed_mask.cpu()),axis=1) # (64,15)
         masks = masks * observed_mask
         masks = masks[:,np.newaxis,:]
-        cond_mask = torch.from_numpy(masks).cuda(0).float()
+        # cond_mask = torch.from_numpy(masks).cuda(0).float()
+        cond_mask = torch.from_numpy(masks).to(torch.float32).to('mps')  # 여기도 mps로 바꿔봄 cuda 대신
+
 
         return cond_mask
 
@@ -142,19 +144,19 @@ class CSDI_base(nn.Module):
         return side_info
 
     def calc_loss_valid(
-        self, observed_data, cond_mask, observed_mask, side_info, is_train
+        self, observed_data, cond_mask, observed_mask, true_ps, side_info, is_train
     ):
         loss_sum = 0
         # In validation, perform T steps forward and backward.
         for t in range(self.num_steps):
             loss = self.calc_loss(
-                observed_data, cond_mask, observed_mask, side_info, is_train, set_t=t
+                observed_data, cond_mask, observed_mask, true_ps, side_info, is_train, set_t=t
             )
             loss_sum += loss.detach()
         return loss_sum / self.num_steps
 
     def calc_loss(
-        self, observed_data, cond_mask, observed_mask, side_info, is_train, set_t=-1
+        self, observed_data, cond_mask, observed_mask, true_ps, side_info, is_train, set_t=-1
     ):
         B, K, L = observed_data.shape
         if is_train != 1:  # for validation
@@ -171,8 +173,9 @@ class CSDI_base(nn.Module):
 
         target_mask = observed_mask - cond_mask
         residual = (noise - predicted) * target_mask
+        residual = (residual**2) / true_ps ### ps 가중치 적용
         num_eval = target_mask.sum()
-        loss = (residual**2).sum() / (num_eval if num_eval > 0 else 1)
+        loss = residual.sum() / (num_eval if num_eval > 0 else 1)
         return loss
 
     def set_input_to_diffmodel(self, noisy_data, observed_data, cond_mask):
@@ -241,6 +244,7 @@ class CSDI_base(nn.Module):
             observed_mask,
             observed_tp,
             gt_mask,
+            true_ps,
             for_pattern_mask,
             _,
             observed_data_org, ###
@@ -256,7 +260,7 @@ class CSDI_base(nn.Module):
         side_info = self.get_side_info(observed_tp, cond_mask)
 
         loss_func = self.calc_loss if is_train == 1 else self.calc_loss_valid
-        return loss_func(observed_data, cond_mask, observed_mask, side_info, is_train)
+        return loss_func(observed_data, cond_mask, observed_mask, true_ps, side_info, is_train)
 
     def evaluate(self, batch, n_samples):
         (
@@ -265,6 +269,7 @@ class CSDI_base(nn.Module):
             observed_mask,
             observed_tp,
             gt_mask,
+            true_ps,
             _,
             cut_length,
             observed_data_org, ###
@@ -287,6 +292,7 @@ class CSDI_base(nn.Module):
             observed_mask,
             observed_tp,
             gt_mask,
+            true_ps,
             _,
             cut_length,
             observed_data_org, ###
@@ -309,6 +315,7 @@ class CSDI_base(nn.Module):
             observed_mask,
             observed_tp,
             gt_mask,
+            true_ps,
             _,
             cut_length,
             observed_data_org, ###
@@ -325,21 +332,25 @@ class TabCSDI(CSDI_base):
     def process_data(self, batch):
         # Insert K=1 axis. All mask now with shape (B, 1, L).
         observed_data = batch["observed_data"][:, np.newaxis, :]
-        observed_data = observed_data.to(self.device).float()
+        # observed_data = observed_data.to(self.device).float()
+        observed_data = observed_data.to(torch.float32).to(self.device)
         observed_data_org = observed_data
 
         ###
         real_data = batch["real_data"][:,np.newaxis, :]
-        real_data = real_data.to(self.device).float()
+        real_data = real_data.to(torch.float32).to(self.device) #.to(self.device).float()
         ###
         observed_mask = batch["observed_mask"][:, np.newaxis, :]
-        observed_mask = observed_mask.to(self.device).float()
+        observed_mask = observed_mask.to(torch.float32).to(self.device) #.to(self.device).float()
 
-        observed_tp = batch["timepoints"].to(self.device).float()
+        observed_tp = batch["timepoints"].to(torch.float32).to(self.device) #.to(self.device).float()
 
         gt_mask = batch["gt_mask"][:, np.newaxis, :]
 
-        gt_mask = gt_mask.to(self.device).float()
+        gt_mask = gt_mask.to(torch.float32).to(self.device) #.to(self.device).float()
+
+        true_ps = batch["true_ps"][:, np.newaxis, :]
+        true_ps = true_ps.to(torch.float32).to(self.device) #.to(self.device).float()
 
         cut_length = torch.zeros(len(observed_data)).long().to(self.device)
         for_pattern_mask = observed_mask
@@ -350,6 +361,7 @@ class TabCSDI(CSDI_base):
             observed_mask,
             observed_tp,
             gt_mask,
+            true_ps, ###
             for_pattern_mask,
             cut_length,
             observed_data_org,
