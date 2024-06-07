@@ -47,11 +47,13 @@ def process_func(path: str, cat_list, encode=True,
     data_enc = encoder.fit_transform(data) # 범주형 변수를 순서형 변수로 인코딩
     data_observed_values = data_enc.values # 마스킹 없는 complete 데이터를 array로
     # observed_masks 생성
-    observed_masks = produce_NA(data_observed_values, mecha=mecha1, opt=opt, m_ratio=m_ratio1, m_cols=m_cols, seed=seed) # missing:1
+    observed_masks, true_ps = produce_NA(data_observed_values, mecha=mecha1, opt=opt, m_ratio=m_ratio1, m_cols=m_cols, seed=seed) # missing:1
     observed_masks = np.array(observed_masks) # array 처리
     observed_masks = (1-observed_masks).astype(bool)
     data2 = np.array(data, copy=True) ### observed_values 대신 data2 일단 사용
     data2[~observed_masks] = np.nan
+
+    true_ps = np.array(true_ps)
     ###
 
     # observed_masks = ~pd.isnull(data)
@@ -74,7 +76,7 @@ def process_func(path: str, cat_list, encode=True,
     new_df2.replace(np.nan, 0, inplace=True)
     new_observed_values2 = new_df2.values ### 1차 결측치 처리 하고 ordinal encoding후 nan을 0으로 바꾼 데이터프레임의 array
 
-    gt_masks = produce_NA(new_observed_values2, mecha=mecha2, opt=opt, m_ratio=m_ratio2, m_cols=m_cols, seed=seed+100) ### seed 추가.
+    gt_masks, _ = produce_NA(new_observed_values2, mecha=mecha2, opt=opt, m_ratio=m_ratio2, m_cols=m_cols, seed=seed+100) ### seed 추가.
     gt_masks = (1-np.array(gt_masks)) #.astype(bool) # 1: observed, 0: missing ### 아 근데 이거... 맞나 모르겠음
     gt_masks = gt_masks * observed_masks # observed_masks에서 0인 것은 0으로 처리해 두 mask를 합침
     ###
@@ -229,6 +231,16 @@ def process_func(path: str, cat_list, encode=True,
         pickle.dump(col_dict, f)
     ###
 
+    ## true_ps를 인코딩된 열로 확장
+    new_columns = sum(col_dict.values(), [])
+    new_true_ps = pd.DataFrame(index=range(len(true_ps)), columns=new_columns)
+    new_true_ps = np.zeros((len(true_ps),len(new_columns)))
+
+    for key, value in col_dict.items():
+        for v in value:
+            new_true_ps[:,v] = true_ps[:,key]
+    ##
+            
     # NaN is replaced by zero
     new_observed_values = np.nan_to_num(new_observed_values)
     new_observed_values = new_observed_values.astype(float)
@@ -242,7 +254,7 @@ def process_func(path: str, cat_list, encode=True,
     gt_masks = gt_masks.astype(int)
 
 
-    return real_values, new_observed_values, new_observed_masks, new_gt_masks, cont_cols
+    return real_values, new_observed_values, new_observed_masks, new_gt_masks, cont_cols, new_true_ps
 
 
 class tabular_dataset(Dataset):
@@ -257,9 +269,9 @@ class tabular_dataset(Dataset):
 
         dataset_path = "./data_census_analog/adult_trim.data"
         processed_data_path = (
-            f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_{col_type}.pk"
+            f"./data_census_analog/{mecha1}-{mecha2}_{m_ratio1}_seed-{seed}_{col_type}.pk"
         )
-        processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_{col_type}_max-min_norm.pk"
+        processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_{m_ratio1}_seed-{seed}_{col_type}_max-min_norm.pk"
 
         cat_list = [1, 3, 5, 6, 7, 8, 9, 13, 14]
         if not os.path.isfile(processed_data_path):
@@ -269,6 +281,7 @@ class tabular_dataset(Dataset):
                 self.observed_masks,
                 self.gt_masks,
                 self.cont_cols,
+                self.true_ps
             ) = process_func(
                 dataset_path,
                 cat_list=cat_list,
@@ -286,6 +299,7 @@ class tabular_dataset(Dataset):
                         self.observed_masks,
                         self.gt_masks,
                         self.cont_cols,
+                        self.true_ps,
                     ],
                     f,
                 )
@@ -293,7 +307,7 @@ class tabular_dataset(Dataset):
 
         elif os.path.isfile(processed_data_path_norm):  # load datasetfile
             with open(processed_data_path_norm, "rb") as f:
-                self.real_values, self.observed_values, self.observed_masks, self.gt_masks = pickle.load(
+                self.real_values, self.observed_values, self.observed_masks, self.gt_masks, self.true_ps = pickle.load(
                     f
                 )
             print("--------Normalized dataset loaded--------")
@@ -310,6 +324,7 @@ class tabular_dataset(Dataset):
             "observed_data": self.observed_values[index],
             "observed_mask": self.observed_masks[index],
             "gt_mask": self.gt_masks[index],
+            "true_ps": self.true_ps[index],
             "timepoints": np.arange(self.eval_length),
         }
         return s
@@ -346,7 +361,7 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
 
     # Here we perform max-min normalization.
     col_type = 'missing_cat' if m_cols ==[1, 3, 5, 6, 7, 8, 9, 13, 14] else 'missing_num' if m_cols == [0,2,4,10,11,12] else 'random'
-    processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_seed-{seed}_{col_type}_max-min_norm.pk"
+    processed_data_path_norm = f"./data_census_analog/{mecha1}-{mecha2}_{m_ratio1}_seed-{seed}_{col_type}_max-min_norm.pk"
     if not os.path.isfile(processed_data_path_norm):
         print(
             "--------------Dataset has not been normalized yet. Perform data normalization and store the mean value of each column.--------------"
@@ -385,27 +400,27 @@ def get_dataloader(seed=1, nfold=5, batch_size=16,
 
         with open(processed_data_path_norm, "wb") as f:
             pickle.dump(
-                [dataset.real_values, dataset.observed_values, dataset.observed_masks, dataset.gt_masks], f
+                [dataset.real_values, dataset.observed_values, dataset.observed_masks, dataset.gt_masks, dataset.true_ps], f
             )
 
     # Create datasets and corresponding data loaders objects.
     full_dataset = tabular_dataset( ## 전체 데이터셋을 가져오는 로더
-        use_index_list=full_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
+        use_index_list=full_index, m_ratio1=m_ratio1, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
     )
     full_loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=0)
 
     sampled_dataset = tabular_dataset( ## 전체 데이터셋을 가져오는 로더
-        use_index_list=sampled_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
+        use_index_list=sampled_index, m_ratio1=m_ratio1, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed ### missing_ratio(2) 대신 mecha1, mecha2 를 넣어야함 (path에 들어가는 요소!!!)
     )
     sampled_loader = DataLoader(sampled_dataset, batch_size=batch_size, shuffle=0)
 
     train_dataset = tabular_dataset(
-        use_index_list=train_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
+        use_index_list=train_index, m_ratio1=m_ratio1, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
     )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=1)
 
     valid_dataset = tabular_dataset(
-        use_index_list=valid_index, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
+        use_index_list=valid_index, m_ratio1=m_ratio1, mecha1=mecha1, mecha2=mecha2, m_cols=m_cols, seed=seed
     )
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=0)
 
