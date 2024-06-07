@@ -22,27 +22,31 @@ class CPU_Unpickler(pickle.Unpickler):
           return super().find_class(module, name)
         
 from src.main_model_table import TabCSDI
-from src.utils_table import train, evaluate_analog_all
-from dataset_insurance.dataset_insurance_analog2 import get_dataloader
+# from src.utils_table import train, evaluate_analog_all
+# from dataset_insurance.dataset_insurance_analog2 import get_dataloader
 
 # Analog, MCAR
 # bringing generation results
-def open_results_an(mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed, start_ind=0, end_ind=20000): # m_ratio1 추가
+def open_results_an(name, mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed, start_ind=0, end_ind=20000): # m_ratio1 추가, name 추가
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    with open(f"./save/insurance_analog_fold5/m_ratio1_{m_ratio1}/{mecha1}{mecha2}_{m_type}/full_generated_outputs_nsample{nsample}seed_{seed}.pk", 'rb') as f :
+    with open(f"./save/{name}_analog_fold5/m_ratio1_{m_ratio1}/{mecha1}{mecha2}_{m_type}/full_generated_outputs_nsample{nsample}seed_{seed}.pk", 'rb') as f :
         if device == "cpu" : results = CPU_Unpickler(f).load()
         else : results = pickle.load(f)
 
     # modelfolder = path_model #
     config = "census_onehot_analog.yaml"
-    exe_name = "insurance"
+    # exe_name = name
 
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
     path = "config/" + config
 
-    m_cols = [1, 4, 5] if m_type == 'missing_cat' else [0,2,3,6] if m_type == 'missing_num' else [0,1,4,6]
+    if name == "insurance":
+        m_cols = [1, 4, 5] if m_type == 'missing_cat' else [0,2,3,6] if m_type == 'missing_num' else [0,1,4,6]
+
+    elif name == "census":
+        m_cols = [1, 3, 5, 6, 7, 8, 9, 13, 14] if m_type == 'missing_cat' else [0,2,4,10,11,12] if m_type == 'missing_num' else [1,2,3,4,6,7,8,11,12,13]
 
     with open(path, "r") as f:
         config = yaml.safe_load(f)
@@ -53,11 +57,11 @@ def open_results_an(mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed, s
     config["model"]["mecha2"] = mecha2 ##
     config["model"]["m_cols"] = m_cols ##
     ##
-    config["model"]["name"] = 'insurance' ## 
+    config["model"]["name"] = name ## 
 
     model = TabCSDI(config, device).to(device)
 
-    model.load_state_dict(torch.load("./save/insurance_analog_fold5/m_ratio1_" + str(m_ratio1) + "/" + mecha1 + mecha2 + "_" + m_type + "/model_" + str(seed) + ".pth", map_location=device))
+    model.load_state_dict(torch.load(f"./save/{name}_analog_fold5/m_ratio1_{m_ratio1}/{mecha1}{mecha2}_{m_type}/model_{seed}.pth", map_location=device))
     model.eval()
 
     fsamples = results[0] #
@@ -73,10 +77,13 @@ def open_results_an(mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed, s
     #     real1 = CPU_Unpickler(f).load()
     ###
 
-    if exe_name == "insurance":
+
+    if name == "insurance":
         with open("./data_insurance/transform.pk", "rb") as f:
             _, cont_cols, saved_cat_dict = pickle.load(f)
-        # print(cont_cols, saved_cat_dict)
+    elif name == "census":
+        with open("./data_census_analog/transform.pk", "rb") as f:
+            _, cont_cols, saved_cat_dict = pickle.load(f)
 
     # Threashold
     for i in range(fsamples_median.values.size(dim=1)):
@@ -104,11 +111,16 @@ def open_results_an(mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed, s
     return fc_target_df, fsamples_median_df, fevalpoints_df, ftarget_imputed_df, freal_df
 
 # Analog 결과 계산 함수 - 2 (real로 비교)
-def analog_results(fevalpoints, ftarget, fimputed, freal):
-    an_cont_list = [0, 3, 4, 10]
+def analog_results(name, fevalpoints, ftarget, fimputed, freal): # name 추가
 
-    with open("./data_insurance/transform.pk", "rb") as f:
-        _, cont_cols, saved_cat_dict = pickle.load(f)
+    if name == "insurance":
+        an_cont_list = [0, 3, 4, 10]
+        with open("./data_insurance/transform.pk", "rb") as f:
+            _, cont_cols, saved_cat_dict = pickle.load(f)
+    elif name == "census":
+        an_cont_list = [0, 5, 11, 28, 29, 30]
+        with open("./data_census_analog/transform.pk", "rb") as f:
+            _, cont_cols, saved_cat_dict = pickle.load(f)
 
     fevalpoints_cont = fevalpoints.iloc[:,an_cont_list]
     fdiff = (freal-fimputed).iloc[:,an_cont_list]
@@ -143,13 +155,13 @@ def analog_results(fevalpoints, ftarget, fimputed, freal):
 
     return frmse, frmse_avg, ferror, ferror_avg
 
-def impute_evaluation(mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed_list):
+def impute_evaluation(name, mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed_list):
     rmse = pd.DataFrame()
     error = pd.DataFrame()
     for s in seed_list:
         seed = s
-        ftarget, fsamples, fevalpoints, fimputed, freal = open_results_an(mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed)
-        frmse, frmse_avg, ferror, ferror_avg = analog_results(fevalpoints, ftarget, fimputed, freal)
+        ftarget, fsamples, fevalpoints, fimputed, freal = open_results_an(name, mecha1, mecha2, m_type, m_ratio1, m_ratio2, nsample, seed)
+        frmse, frmse_avg, ferror, ferror_avg = analog_results(name, fevalpoints, ftarget, fimputed, freal)
         rmse[str(seed)] = frmse
         error[str(seed)] = pd.Series(ferror)
         rmse.loc['avg',str(seed)] = frmse_avg

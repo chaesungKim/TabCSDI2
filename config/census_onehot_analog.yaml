@@ -2,7 +2,7 @@
 #type: args
 
 train:
-  epochs: 100 ###
+  epochs: 30 ###
   batch_size: 64 
   lr: 0.0005
 
